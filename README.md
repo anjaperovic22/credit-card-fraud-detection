@@ -15,10 +15,34 @@ Glavni tehnički izazov u domenu detekcije finansijskih prevara leži u činjeni
 </p>
 
 <p align="justify">
-Predmet ovog projektnog zadatka jeste implementacija višeslojnog perceptrona (MLP) u okviru biblioteke PyTorch sa ciljem binarne klasifikacije transakcija na legitimne i prevarantske. Pored same konstrukcije i obučavanja mreže, poseban fokus biće stavljen na preprocesiranje podataka, rešavanje problema pomenutog debalansa klasa, kao i na hiperparametarsku optimizaciju kroz promenu stopa učenja, aktivacionih funkcija i optimizacionih algoritama. Evaluacija uspešnosti modela biće izvršena korišćenjem naprednih metričkih pokazatelja.
+Predmet ovog projektnog zadatka jeste implementacija više modela neuronskih mreža sa ciljem binarne klasifikacije transakcija na legitimne i prevarantske. Pored same konstrukcije i obučavanja mreže, poseban fokus biće stavljen na preprocesiranje podataka, rešavanje problema pomenutog debalansa klasa, kao i na hiperparametarsku optimizaciju kroz promenu stopa učenja, aktivacionih funkcija i optimizacionih algoritama. Evaluacija uspešnosti modela biće izvršena korišćenjem naprednih metričkih pokazatelja.
 </p>
 
-## 2. Podaci  (izvor, struktura, analiza preprocesiranje)
+## 2. Struktura projekta
+
+<p align="justify">
+Kod linearnih algoritama s kojima smo se ranije susretali, poput logističke regresije ili  SVM-a, pretpostavka je linearna. Na primer, mogli bismo reći da što je veći iznos transakcije, veća je šansa da je u pitanju prevara.
+</p>
+<p align="justify">
+U realnosti, prevare su mnogo suptilnije. Izvršena transakcija ne mora da bude u iznosu od više stotina eura da bi bila krađa. Možda vršioci ilegalnih aktivnosti naprave desetak brzih transakcija od po 5 eura u roku od svega par minuta. Dakle, anomalija nije u visokoj vrednosti vež u specifičnoj kombinaciji određenih vrednosti pod čudnim uglovima. 
+</p>
+
+<p align="justify">
+Glavni cilj ovog rada jeste komparativna analiza performansi različitih arhitektura i konfiguracija veštačkih neuronskih mreža nad prikupljenim podacima, i sve to zarad identifikacije optimalnog modela za primenu u realnom bankarskom poslovanju. 
+</p>
+<p align="justify">
+Detekcija finansijskih prevara zahteva balansiranje između dva dijametralno suprotstavljena poslovna cilja: maksimizacije bezbednosti (hvatanja što većeg broja prevara) i očuvanja vrhunskog korisničkog iskustva (izbegavanje lažnih uzbuna i neopravdanog blokiranja kartica).
+</p>
+<p align="justify">
+Kroz razvoj četiri modela, analiziraćemo kako različite inženjerske metode utiču na ovaj kompromis. 
+</p>
+
+* Model 1: **Baseline model (skicit-learn MLPClassifier)**
+* Model 2: **Osnovni PyTorch MLP model**
+* Model 3: **Težinski PyTorch MLP model**
+* Model 4: **Regularizovani PyTorch MLP model**
+
+## 3. Podaci  (izvor, struktura, analiza preprocesiranje)
 
 <p align="justify">
 Skup podataka koji će biti korišćen nadalje u radu preuzet je sa <a href="https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud" target="_blank">sledećeg linka</a>.
@@ -47,8 +71,18 @@ Radi bolje preglednosti, u tabeli ispod je prikazana konačna struktura atributa
 | Naziv atributa | Tip podatka | Opis atributa |
 | :--- | :--- | :--- |
 | **V1 - V28** | Numerički (Float) | Kompresovane anonimne karakteristike dobijene PCA transformacijom |
-| **Time** | Numerički (Float) | Protekle sekunde od prve transakcije v bazi podataka |
+| **Time** | Numerički (Float) | Protekle sekunde od prve transakcije u bazi podataka |
 | **Amount** | Numerički (Float) | Novčani iznos transakcije (izražen u eurima) |
 | **Class** | Binarni (0 ili 1) | **Ciljna promenljiva** (0 = Regularna transakcija, 1 = Prevara) |
 
+</div>
+
+## 4. Arhitektura modela
+
+<div align="center">
+<img width="800" height="340" alt="arhitektura_neuronske_mreze" src="https://github.com/user-attachments/assets/0d6c8399-e40f-4920-a3fd-b401796ceafc" />
+  <p align="justify">
+    <br>
+    <b>Slika 1:</b> Detaljan šematski prikaz arhitekture implementiranog višeslojnog perceptrona (MLP). Na šemi je prikazan skraćeni vizuelni pregled slojeva sa tačnim brojem neurona (30 -> 64 -> 32 -> 1).
+  </p>
 </div>
