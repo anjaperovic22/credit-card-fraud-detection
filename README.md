@@ -86,3 +86,76 @@ Radi bolje preglednosti, u tabeli ispod je prikazana konačna struktura atributa
     <b>Slika 1:</b> Detaljan šematski prikaz arhitekture implementiranog višeslojnog perceptrona (MLP). Na šemi je prikazan skraćeni vizuelni pregled slojeva sa tačnim brojem neurona (30 -> 64 -> 32 -> 1).
   </p>
 </div>
+
+<p align="justify">Kako bi se osigurala doslednost eksperimenta i omogućilo adekvatno upoređivanje performansi, svi modeli obučavani u okviru ovog istraživanja dele identičnu osnovnu arhitekturu. Kao što je prikazano na dijagramu, svaka neuronska mreža je dizajnirana sa ulaznim slojem od 30 neurona, dva skrivena sloja koja sadrže 64 i 32 neurona respektivno, kao i izlaznim slojem sa jednim neuronom zaduženim za binarnu klasifikaciju.</p>
+
+## 5. Model 1 - Baseline model (skicit-learn MLPClassifier)
+
+<p align="justify">
+U svetu mašinskog učenja, <b>MLPClassifier</b> (Multi-layer Perceptron Classifier) iz biblioteke <i>scikit-learn</i> predstavlja pristupačnu i moćnu polaznu tačku za rešavanje problema klasifikacije pomoću neuronskih mreža. Ovaj model nudi implementaciju višeslojnog perceptrona i predstavlja idealan izbor za izgradnju robustnog baseline modela, pre nego što se pređe na složenije deep learning okvire.
+</p>
+
+### Trening
+
+<p align="justify">
+Za iterativno ažuriranje težina i minimizaciju Log-Loss funkcije greške, upotrebljen je Adam (Adaptive Moment Estimation) optimizator. Ovaj algoritam je implementiran zbog svoje visoke računske efikasnosti i sposobnosti da adaptivno prilagođava stopu učenja za svaki parametar individualno.
+</p>
+<p align="justify">
+Za razliku od modela sa eksplicitno definisanim brojem epoha, trening Modela 1 zasnovan je na dinamičkom mehanizmu tolerancije zaustavljanja. Postavljen na maksimalno 1000 iteracija, algoritam kontinuirano evaluira pad funkcije greške. Obučavanje se automatski zaustavlja kada se detektuje da dalja optimizacija ne donosi statistički relevantno smanjenje gubitka, čime se efikasno limitira potencijalno preprilagođavanje (<i>overfitting</i>). U okviru sprovedenog eksperimenta, mreža je uspešno pronašla optimalni lokalni minimum i konvergirala u tačno <b>28</b>. iteraciji.
+</p>
+<div align="center">
+<img width="700" height="471" alt="grafik1" src="https://github.com/user-attachments/assets/cbb1446a-1630-43d8-9e70-164bbb3ef9bc" />
+</div>
+
+<p align="justify">
+Na osnovu prikazanog grafika promene vrednosti funkcije greške tokom treninga, uočava se izrazita nestabilnost i prisustvo velikih oscilacija iz epohe u epohu. U stabilnim uslovima obučavanja, kriva greške bi trebalo da ima linearan ili gladak eksponencijalni pad, dok ovde vidimo nagle skokove vrednosti (npr. oko 4, 13, 20. i 24. iteracije).
+</p>
+
+<p align="justify">
+Ovakvo ponašanje MLPClassifier modela direktno je uzrokovano specifičnostima našeg skupa podataka i ograničenjima podrazumevanih algoritama optimizacije:
+</p>
+
+*    <p align="justify"><b>Ekstremni debalans klasa</b>: Tokom stohastičkog ili mini-batch gradijentnog spusta, algoritam deli podatke u manje pakete. S obzirom na to da prevare čine manje od 1% skupa, model u većini paketa vidi samo regularne transakcije i uspešno minimizuje grešku. Međutim, kada model naiđe na paket koji sadrži nekoliko prevara, on pravi drastičnu grešku u predikciji jer te primere retko viđa. To dovodi do naglog ažuriranja težina i skoka celokupne funkcije greške u toj iteraciji.</p>
+*    <p align="justify"><b>Suboptimalna stopa učenja</b>: Visoka fiksna stopa učenja uzrokuje da model previše agresivno menja svoje parametre nakon svake greške. Umesto da lagano konvergira ka globalnom minimumu, model "preskače" optimalne vrednosti težina i luta kroz prostor performansi.</p>
+
+### Kreiranje predikcija
+
+<p align="justify">
+Kod <i>skicit-learn</i> modela, proces kreiranja predikcija je visokog nivoa apstrakcije i realizovan je putem ugrađene predict() metode. Model interno izračunava verovatnoće pripadnosti klasama, a zatim automatski primenjuje podrazumevani prag odlučivanja (decision threshold) od 0.5. Sve transakcije sa verovatnoćom jednakom ili većom od ovog praga klasifikuju se kao prevare (klasa 1), dok se ostale označavaju kao regularne (klasa 0).
+</p>
+
+<code>y_pred_1 = model_1_sklearn_mlp.predict(X_test)
+y_proba_1 = model_1_sklearn_mlp.predict_proba(X_test)
+</code>
+
+### Evaluacija
+
+### -> Matrica konfuzije
+
+<div align="center">
+  <img width="590" height="490" alt="cm1" src="https://github.com/user-attachments/assets/173289e9-0a42-4191-99aa-b6aedd2b85ef" />
+</div>
+
+<p align="justify">Model je uspešno identifikovao 78 stvarnih prevara (<b>True Positive</b>) i tačno klasifikovao 56.813 regularnih transakcija (<b>True Negative</b>). S obzirom na to da je ovo inicijalni model pokrenut bez naprednih tehnika balansiranja, sposobnost mreže da locira većinu prevara predstavlja solidnu polaznu osnovu.</p>
+
+<p align="justify">Pored solidnog starta, model pokazuje dva ključna nedostatka. Prvi je prisustvo 20 lažno negativnih rezultata (<b>False Negative</b>) – to su stvarne prevare koje je model propustio i označio kao bezopasne, što u realnom bankarskom sistemu generiše direktne finansijske gubitke. Drugi nedostatak je 51 lažno pozitivna predikcija (<b>False Positive</b>), odnosno situacije u kojima su regularni korisnici greškom blokirani, što narušava korisničko iskustvo.</p>
+
+### -> Klasifikacioni izveštaj za Baseline Model
+
+<div align="center">
+
+| Klasa / Metrika | Precision | Recall | F1-Score | Support |
+| :--- | :---: | :---: | :---: | :---: |
+| **Regularna (0)** | 1.00 | 1.00 | 1.00 | 56864 |
+| **Prevara (1)** | 0.60 | 0.80 | 0.69 | 98 |
+| **Accuracy** | — | — | 1.00 | 56962 |
+| **Macro Avg** | 0.80 | 0.90 | 0.84 | 56962 |
+| **Weighted Avg** | 1.00 | 1.00 | 1.00 | 56962 |
+
+</div>
+
+<p align="justify"> Ukupna nominalna tačnost modela (<b>Accuracy</b>) iznosi maksimalnih 1.00. Međutim, ova vrednost je visoka isključivo zbog ekstremnog prisustva većinske klase (56.864 uzoraka). Ovo je odličan primer zašto je ukupna tačnost potpuno nepouzdana i varljiva metrika za evaluaciju modela u uslovima visokog debalansa podataka. </p>
+
+<p align="justify">Fokusiranjem na manjinsku klasu (98 uzoraka), uočavamo da model ostvaruje odziv (<b>Recall</b>) od 0.80, što znači da uspešno detektuje 80% stvarnih prevara. Sa druge strane, preciznost (<b>Precision</b>) iznosi 0.60, što ukazuje na to da su 40% transakcija koje je model označio kao sumnjive zapravo bile regularne.</p>
+
+<p align="justify">Harmonijska sredina ovih performansi izražena je kroz <b>F1-score</b> koji za klasu prevara iznosi 0.69. Ovaj broj predstavlja zvaničnu ocenu našeg trenutnog modela i služi kao polazna tačka. Glavni cilj u nastavku projekta biće optimizacija mreže kroz PyTorch okruženje kako bi se ovaj F1-score značajno unapredio.</p>
