@@ -89,180 +89,95 @@ Radi bolje preglednosti, u tabeli ispod je prikazana konačna struktura atributa
 
 <p align="justify">Kako bi se osigurala doslednost eksperimenta i omogućilo adekvatno upoređivanje performansi, svi modeli obučavani u okviru ovog istraživanja dele identičnu osnovnu arhitekturu. Kao što je prikazano na dijagramu, svaka neuronska mreža je dizajnirana sa ulaznim slojem od 30 neurona, dva skrivena sloja koja sadrže 64 i 32 neurona respektivno, kao i izlaznim slojem sa jednim neuronom zaduženim za binarnu klasifikaciju.</p>
 
-## 5. Model 1 - Baseline model (skicit-learn MLPClassifier)
+## 5. Trening
 
+### Model 1 - Baseline model (scikit-learn MLPClassifier)
 <p align="justify">
-U svetu mašinskog učenja, <b>MLPClassifier</b> (Multi-layer Perceptron Classifier) iz biblioteke <i>scikit-learn</i> predstavlja pristupačnu i moćnu polaznu tačku za rešavanje problema klasifikacije pomoću neuronskih mreža. Ovaj model nudi implementaciju višeslojnog perceptrona i predstavlja idealan izbor za izgradnju robustnog baseline modela, pre nego što se pređe na složenije deep learning okvire.
-</p>
-
-### Pravljenje modela
-
-<p align="justify">
-Model 1 je kreiran upotrebom klase <b>MLPClassifier</b> unutar <i>scikit-learn</i> biblioteke. Struktura mreže i parametri optimizacije definišu se implicitno prilikom same inicijalizacije objekta. Skriveni slojevi su deklarisani pomoću <code>hidden_layer_sizes=(64, 32)</code>. Scikit-Learn automatski mapira ulazni sloj na osnovu dimenzionalnosti prosleđene matrice podataka ($X$) i povezuje ga sa prvim skrivenim slojem od 64 neurona, koji se dalje transformiše u sloj od 32 neurona. Parametar <code>max_iter=1000</code> postavlja gornju granicu za broj iteracija (epoha) optimizatora. Ova vrednost je svesno podignuta na 1000 kako bi se algoritmu pružio dovoljan prostor da bezbedno konvergira do optimalnog lokalnog minimuma, sprečavajući prerani prekid obučavanja usled dostizanja podrazumevanog hardverskog limita. Parametar <code>random_state</code> je vezan za globalnu konstantu projekta, čime je osigurano da se početna pseudo-slučajna inicijalizacija težina (Glorot/Xavier) ponavlja na identičan način prilikom svakog pokretanja ćelije.
-</p>
-
-
-### Trening
-
-<p align="justify">
-Za iterativno ažuriranje težina i minimizaciju Log-Loss funkcije greške, upotrebljen je Adam (Adaptive Moment Estimation) optimizator. Ovaj algoritam je implementiran zbog svoje visoke računske efikasnosti i sposobnosti da adaptivno prilagođava stopu učenja za svaki parametar individualno.
+Model 1 je kreiran upotrebom klase <b>MLPClassifier</b> unutar <i>scikit-learn</i> biblioteke sa parametrima <code>hidden_layer_sizes=(64, 32)</code>, <code>max_iter=1000</code> i fiksiranim <code>random_state</code>. Za optimizaciju je upotrebljen Adam algoritam, a obučavanje je zaustavljeno dinamički - mreža je konvergirala u tačno <b>28. iteraciji</b> aktiviranjem mehanizma ranog zaustavljanja (<i>early stopping</i>).
 </p>
 <p align="justify">
-Za razliku od modela sa eksplicitno definisanim brojem epoha, trening Modela 1 zasnovan je na dinamičkom mehanizmu tolerancije zaustavljanja. Postavljen na maksimalno 1000 iteracija, algoritam kontinuirano evaluira pad funkcije greške. Obučavanje se automatski zaustavlja kada se detektuje da dalja optimizacija ne donosi statistički relevantno smanjenje gubitka, čime se efikasno limitira potencijalno preprilagođavanje (<i>overfitting</i>). U okviru sprovedenog eksperimenta, mreža je uspešno pronašla optimalni lokalni minimum i konvergirala u tačno <b>28</b>. iteraciji.
+Na grafikonu krive učenja uočava se izrazita nestabilnost i prisustvo velikih oscilacija, uzrokovanih ekstremalnim disbalansom klasa i suboptimalnom fiksnom stopom učenja. Uprkos tome, finalna vrednost loss-a iznosi 0.042.
 </p>
-<div align="center">
-<img width="700" height="471" alt="grafik1" src="https://github.com/user-attachments/assets/cbb1446a-1630-43d8-9e70-164bbb3ef9bc" />
-</div>
+
+### Model 2 - Osnovni PyTorch MLP
+<p align="justify">
+Prelazak na PyTorch okruženje donosi potpunu kontrolu nad trening petljom. Model je obučavan kroz <b>20 epoha</b> sa mini-serijama veličine 1024, korišćenjem <code>BCEWithLogitsLoss</code> funkcije greške i Adam optimizatora sa stopom učenja 0.001. Kriva učenja pokazuje monoton pad od 0.08 do 0.0017, bez naglih oscilacija - što ukazuje na stabilnu konvergenciju.
+</p>
+
+### Model 3 - Težinski PyTorch MLP
+<p align="justify">
+Identična arhitektura i trening procedura kao Model 2, uz jednu ključnu modifikaciju: funkciji greške <code>BCEWithLogitsLoss</code> prosleđen je parametar <code>pos_weight</code>, izračunat kao odnos broja regularnih transakcija i broja prevara u trening skupu (~578). Ovaj koeficijent primorava optimizator da višestruko strože kažnjava model za svaku propuštenu prevaru, čime se kompenzuje ekstreman disbalans klasa.
+</p>
+
+### Model 4 - Regularizovani PyTorch MLP
+<p align="justify">
+Model 4 zadržava težinsku funkciju greške iz Modela 3 i dodaje dve tehnike regularizacije: <b>Dropout</b> slojeve sa verovatnoćom p=0.2 iza oba skrivena sloja, i <b>L2 regularizaciju</b> (<code>weight_decay=1e-4</code>) unutar Adam optimizatora. Cilj je bio smanjiti preprilagođavanje (<i>overfitting</i>) koje je uzrokovalo veliki broj lažnih uzbuna kod Modela 3.
+</p>
+
+## 6. Analiza osetljivosti i hiperparametarska optimizacija
+
+### Threshold analiza
 
 <p align="justify">
-Na osnovu prikazanog grafika promene vrednosti funkcije greške tokom treninga, uočava se izrazita nestabilnost i prisustvo velikih oscilacija iz epohe u epohu. U stabilnim uslovima obučavanja, kriva greške bi trebalo da ima linearan ili gladak eksponencijalni pad, dok ovde vidimo nagle skokove vrednosti (npr. oko 4, 13, 20. i 24. iteracije).
+Threshold analiza sprovedena je kao pokušaj da se poboljšaju performanse Modela 3 i Modela 4, koji su uprkos visokom recallu pokazali izrazito nisku preciznost pri standardnom pragu odlučivanja od 0.5. Ideja je bila da podizanjem praga model postane selektivniji u proglašavanju transakcija prevarama, čime bi se smanjio broj lažnih uzbuna uz zadržavanje visokog odziva.
+</p>
+<p align="justify">
+Međutim, rezultati analize su pokazali da ni pri optimalnom pragu od 0.85 preciznost Modela 3 ne prelazi 0.15, dok F1-score ostaje na svega 0.256. Ovo ukazuje da problem nije u pragu odlučivanja, već u samoj prirodi modela - uvođenje <code>pos_weight</code> parametra toliko je pomerilo granicu odlučivanja ka manjinskoj klasi da model strukturalno generiše veliki broj lažnih uzbuna, bez obzira na naknadna podešavanja. Threshold tuning dakle nije dao željene rezultate, što dodatno učvršćuje zaključak da je <b>Model 2 optimalan izbor</b>.
+</p>
+
+### Analiza osetljivosti
+
+<p align="justify">
+Analiza osetljivosti sprovedena je za Model 2 (Baseline Pytorch), kao model koji je pokazao najbolje ukupne performanse, kako bi se stekao uvid u to koja obeležja najviše utiču na njegove odluke.</p>
+
+<p align="justify">Model 2 pokazuje raspodelu uticaja među top obeležjima: V6, V14 i Amount nalaze se na vrhu liste sa vrednostima apsolutnog gradijenta između 0.0008 i 0.001, dok ostatak top 10 (V27, V4, V28, V7, V21, V16, V2) blago opada u opsegu 0.0005–0.00065.
 </p>
 
 <p align="justify">
-Ovakvo ponašanje MLPClassifier modela direktno je uzrokovano specifičnostima našeg skupa podataka i ograničenjima podrazumevanih algoritama optimizacije:
-</p>
+Posebno je značajna visoka pozicija varijable Amount (3. mesto), jedne od dve neskrivene i direktno interpretabilne varijable u datasetu. Njen uticaj ima jasno poslovno opravdanje — prevare često uključuju transakcije neobičnih iznosa, pa je logično da model ovaj signal koristi pri donošenju odluke. Model koji svoju odluku gradi na većem broju relevantnih obeležja, umesto da se oslanja na jedan dominantan signal, generalno je robusniji na šum u podacima i bolje se generalizuje na neviđenim primerima. Ovaj nalaz konzistentan je sa svim prethodno izmerenim metrikama i dodatno učvršćuje preporuku da Model 2 predstavlja optimalno rešenje za detekciju prevara u ovom kontekstu.</p>
 
-*    <p align="justify"><b>Ekstremni debalans klasa</b>: Tokom stohastičkog ili mini-batch gradijentnog spusta, algoritam deli podatke u manje pakete. S obzirom na to da prevare čine manje od 1% skupa, model u većini paketa vidi samo regularne transakcije i uspešno minimizuje grešku. Međutim, kada model naiđe na paket koji sadrži nekoliko prevara, on pravi drastičnu grešku u predikciji jer te primere retko viđa. To dovodi do naglog ažuriranja težina i skoka celokupne funkcije greške u toj iteraciji.</p>
-*    <p align="justify"><b>Suboptimalna stopa učenja</b>: Visoka fiksna stopa učenja uzrokuje da model previše agresivno menja svoje parametre nakon svake greške. Umesto da lagano konvergira ka globalnom minimumu, model "preskače" optimalne vrednosti težina i luta kroz prostor performansi.</p>
-
-### Kreiranje predikcija
-
-<p align="justify">
-Kod <i>skicit-learn</i> modela, proces kreiranja predikcija je visokog nivoa apstrakcije i realizovan je putem ugrađene predict() metode. Model interno izračunava verovatnoće pripadnosti klasama, a zatim automatski primenjuje podrazumevani prag odlučivanja (decision threshold) od 0.5. Sve transakcije sa verovatnoćom jednakom ili većom od ovog praga klasifikuju se kao prevare (klasa 1), dok se ostale označavaju kao regularne (klasa 0).
-</p>
-
-<code>y_pred_1 = model_1_sklearn_mlp.predict(X_test)
-y_proba_1 = model_1_sklearn_mlp.predict_proba(X_test)
-</code>
-
-### Evaluacija
-
-### -> Matrica konfuzije
-
-<div align="center">
-  <img width="590" height="490" alt="cm1" src="https://github.com/user-attachments/assets/173289e9-0a42-4191-99aa-b6aedd2b85ef" />
-</div>
-
-<p align="justify">Model je uspešno identifikovao 78 stvarnih prevara (<b>True Positive</b>) i tačno klasifikovao 56.813 regularnih transakcija (<b>True Negative</b>). S obzirom na to da je ovo inicijalni model pokrenut bez naprednih tehnika balansiranja, sposobnost mreže da locira većinu prevara predstavlja solidnu polaznu osnovu.</p>
-
-<p align="justify">Pored solidnog starta, model pokazuje dva ključna nedostatka. Prvi je prisustvo 20 lažno negativnih rezultata (<b>False Negative</b>) – to su stvarne prevare koje je model propustio i označio kao bezopasne, što u realnom bankarskom sistemu generiše direktne finansijske gubitke. Drugi nedostatak je 51 lažno pozitivna predikcija (<b>False Positive</b>), odnosno situacije u kojima su regularni korisnici greškom blokirani, što narušava korisničko iskustvo.</p>
-
-### -> Klasifikacioni izveštaj za Baseline Model
+## 7. Rezultati evaluacije
 
 <div align="center">
-
-| Klasa / Metrika | Precision | Recall | F1-Score | Support |
-| :--- | :---: | :---: | :---: | :---: |
-| **Regularna (0)** | 1.00 | 1.00 | 1.00 | 56864 |
-| **Prevara (1)** | 0.60 | 0.80 | 0.69 | 98 |
-| **Accuracy** | — | — | 1.00 | 56962 |
-| **Macro Avg** | 0.80 | 0.90 | 0.84 | 56962 |
-| **Weighted Avg** | 1.00 | 1.00 | 1.00 | 56962 |
+  
+| Model | Precision | Recall | F1-Score |
+| :--- | :--- | :--- | :--- |
+| Model 1 — Sklearn Baseline | 0.60 | 0.80 | 0.69 |
+| Model 2 — PyTorch Base | 0.82 | 0.82 | 0.82 |
+| Model 3 — Težinski | 0.06 | 0.91 | 0.11 |
+| Model 4 — Regularizovani | 0.05 | 0.92 | 0.10 |
 
 </div>
 
-<p align="justify"> Ukupna nominalna tačnost modela (<b>Accuracy</b>) iznosi maksimalnih 1.00. Međutim, ova vrednost je visoka isključivo zbog ekstremnog prisustva većinske klase (56.864 uzoraka). Ovo je odličan primer zašto je ukupna tačnost potpuno nepouzdana i varljiva metrika za evaluaciju modela u uslovima visokog debalansa podataka. </p>
+### Model 1 - Baseline model (scikit-learn MLPClassifier)
+<p align="justify">Model je uspešno identifikovao 78 stvarnih prevara (True Positive) i tačno klasifikovao 56.813 regularnih transakcija (True Negative), uz 20 propuštenih prevara (False Negative) i 51 lažnu uzbunu (False Positive). F1-score za klasu prevara iznosi <b>0.69</b> i služi kao polazna tačka za poređenje.</p>
 
-<p align="justify">Fokusiranjem na manjinsku klasu (98 uzoraka), uočavamo da model ostvaruje odziv (<b>Recall</b>) od 0.80, što znači da uspešno detektuje 80% stvarnih prevara. Sa druge strane, preciznost (<b>Precision</b>) iznosi 0.60, što ukazuje na to da su 40% transakcija koje je model označio kao sumnjive zapravo bile regularne.</p>
+### Model 2 - Osnovni PyTorch MLP
+<p align="justify">Sa svega 17 lažnih uzbuna i 18 propuštenih prevara, Model 2 ostvaruje uniformnih <b>0.82</b> za preciznost, recall i F1-score što predstavlja značajan napredak u odnosu na Baseline. Makro prosek od 0.91 potvrđuje da model podjednako dobro funkcioniše na obe klase uprkos disbalansu.</p>
 
-<p align="justify">Harmonijska sredina ovih performansi izražena je kroz <b>F1-score</b> koji za klasu prevara iznosi 0.69. Ovaj broj predstavlja zvaničnu ocenu našeg trenutnog modela i služi kao polazna tačka. Glavni cilj u nastavku projekta biće optimizacija mreže kroz PyTorch okruženje kako bi se ovaj F1-score značajno unapredio.</p>
+### Model 3 - Težinski PyTorch MLP
+<p align="justify">Uvođenjem <code>pos_weight</code> recall skače na <b>0.91</b> (samo 9 propuštenih prevara), ali preciznost pada na svega <b>0.06</b> uz 1.418 lažnih uzbuna. F1-score iznosi 0.11, što model čini nepraktičnim za realnu primenu.</p>
 
-## 6. Model 2 - Baseline Pytorch model
+### Model 4 - Regularizovani PyTorch MLP
+<p align="justify">Dropout i L2 regularizacija nisu poboljšali situaciju - recall raste na <b>0.92</b> (8 propuštenih prevara), ali preciznost ostaje na <b>0.05</b> uz 1.579 lažnih uzbuna. F1-score od 0.10 je najniži od svih modela, što potvrđuje da regularizacija nije adekvatno rešenje za problem ekstremalnog disbalansa klasa u ovom kontekstu.</p>
 
-<p align="justify">Model 2 predstavlja ključnu tranziciju sa tradicionalnih biblioteka visokog nivoa apstrakcije (Scikit-Learn) na namenski okvir za duboko učenje – PyTorch. Primarni cilj ovog modela jeste uspostavljanje izvornog dubokog baseline-a na nivou neuronskih mreža, kako bi se evaluiralo kako se čista arhitektura ponaša pod uticajem ekstremnog disbalansa klasa, pre nego što se primene specifične tehnike otežavanja ili regularizacije.</p>
+## 8. Diskusija
 
-<p align="justify">Najpre smo izvršile transformaciju train i test skupova u tenzore da bismo mogle da radimo sa PyTorch bibliotekom.</p>
+<p align="justify"> Rezultati eksperimenta otkrivaju jasnu dinamiku kompromisa između preciznosti i odziva kroz četiri različite konfiguracije modela, i ukazuju na nekoliko važnih zaključaka o prirodi problema detekcije finansijskih prevara. </p> <p align="justify"> <b>Model 2 se izdvaja kao statistički najizbalansiranije i praktično najupotrebljivije rešenje.</b> Uniformne vrednosti od 0.82 za sve tri ključne metrike nisu slučajnost - one su direktna posledica toga što model uči opšte obrasce prevare bez veštačkog pomeranja granice odlučivanja. Analiza osetljivosti dodatno potvrđuje ovu ocenu: Model 2 gradi svoju odluku na ravnomernoj raspodeli uticaja među više relevantnih obeležja (V6, V14, Amount, V27), umesto da se oslanja na jedan dominantan signal. Ovakva arhitektura odlučivanja je robusnija na šum i bolje se generalizuje na neviđenim primerima. </p> <p align="justify"> <b>Modeli 3 i 4 demonstriraju tipičnu zamku agresivnog balansiranja klasa.</b> Uvođenjem <code>pos_weight</code> koeficijenta od ~578, funkcija greške postaje toliko opsednuta manjinskom klasom da model praktično svaku transakciju proglašava sumnjivom. Threshold analiza, sprovedena u opsegu 0.1–0.9, pokazala je da ni pri optimalnom pragu od 0.85 preciznost Modela 3 ne prelazi 0.15, što dokazuje da problem nije u izboru praga već u fundamentalnoj konfiguraciji modela. Regularizacija (Dropout + L2) u Modelu 4 nije uspela da ispravi ovaj disbalans, jer je problem strukturalnog, a ne generalizacionog karaktera. </p> <p align="justify"> <b>Važno ograničenje projekta</b> tiče se interpretabilnosti rezultata: varijable V1–V28 su anonimizovane PCA transformacijom, zbog čega nije moguće dati pun poslovni kontekst za nalaze analize osetljivosti. Jedini direktno interpretabilan signal - varijabla Amount - pojavljuje se na trećem mestu po uticaju u Modelu 2, što je konzistentno sa opštepoznatim obrascima finansijskih prevara. </p> <p align="justify"> <b>Moguća unapređenja</b> koja nisu bila predmet ovog rada uključuju: primenu SMOTE tehnike za sintetičko generisanje uzoraka manjinske klase, uvođenje validacionog skupa za praćenje generalizacije tokom treninga, kao i ispitivanje naprednih arhitektura poput LSTM mreža koje bi mogle da iskoriste temporalnu strukturu podataka (varijabla Time). </p>
 
-###  Pravljenje modela
-
-<p align="justify">Arhitektura je realizovana kroz prilagođenu klasu FraudDetectionMLP koja nasleđuje bazni modul nn.Module, što omogućava potpunu kontrolu nad matematičkim operacijama u slojevima i protokom gradijenata. Konstruktor klase (<code>__init__</code>) eksplicitno definiše slojeve i njihove transformacije:</p>
-
-<p align="justify"><b>Prvi linearni sloj (nn.Linear(30, 64))</b>: Prihvata ulazni vektor od 30 obeležja (28 PCA komponenti uz skalirano vreme i iznos) i projektuje ga u prostor od 64 dimenzije. Nad izlazom ovog sloja primenjuje se nelinearna aktivaciona funkcija ReLU (nn.ReLU), koja omogućava mreži da uči složene, nelinearne odnose među finansijskim varijablama.</p>
-<p align="justify"><b>Drugi linearni sloj (nn.Linear(64, 32))</b>: Uzima apstraktne karakteristike izvučene iz prethodnog sloja i dodatno ih sažima na 32 dimenzije, ponovo koristeći ReLU nelinearnost za očuvanje kompleksnosti reprezentacije.
-<p align="justify"><b>Konačni izlazni sloj (nn.Linear(32, 1))</b>: Transformiše 32 obeležja u jedan linearni izlaz (tzv. logit). Važna inženjerska specifičnost ovog modela jeste da izlazni sloj ne sadrži ugrađenu Sigmoid funkciju unutar same arhitekture; sirove vrednosti se direktno prosleđuju, što je optimizovano rešenje za numerički stabilno računanje složenih funkcija greške.
-
-<p align="justify">Metoda <code>forward</code> precizno definiše algoritam prolaza podataka unapred (forward pass), usmeravajući ulazni tenzor kroz definisane linearne transformacije i aktivacione funkcije do konačnog izlaza. Neposredno pre samog kreiranja objekta model_2_pytorch_base, obavezno se poziva funkcija <code>set_seed(RAND_STATE)</code>. Ovaj korak je kritičan jer PyTorch generator nasumičnih brojeva preuzima kontrolu nad inicijalizacijom težina unutar nn.Linear modula. Pozivanjem ove funkcije tačno iznad instance modela, garantuje se da će mreža uvek startovati sa identičnim težinama, čineći ponašanje ovog dubokog modela potpuno ponovljivim.</p>
-
-### Trening
-
-<p align="justify">Za razliku od <i>scikit-learn</i> okruženja gde je proces obučavanja potpuno apstrahovan unutar jedne metode, <i>PyTorch</i> zahteva eksplicitnu definiciju petlje za treniranje (<i>Training Loop</i>). Time se ostvaruje potpuna inženjerska kontrola nad računanjem gradijenata, propagacijom greške i ažuriranjem težina modela.</p>
-
-<p align="justify"><b>Funkcija greške i optimizator:</b></p>
-
-* <p align="justify"><b>Kriterijum (Loss Function):</b> Upotrebljena je <code>BCEWithLogitsLoss</code> funkcija (Binarna unakrsna entropija sa logitima). Ključna prednost ove funkcije je ta što interno kombinuje <code>Sigmoid</code> sloj i standardni <code>BCELoss</code> u jednu matematičku celinu. Ovaj pristup je numerički drastično stabilniji od odvojenog propuštanja vrednosti kroz aktivacionu funkciju unutar arhitekture, čime se sprečavaju problemi sa iščezavajućim gradijentima (<i>vanishing gradients</i>).</p>
-* <p align="justify"><b>Optimizator:</b> Optimizacija svih parametara mreže poverena je <b>Adam</b> algoritmu, uz fiksiranu stopu učenja (<i>Learning Rate</i>) od 0.001, što osigurava brzu i stabilnu konvergenciju.</p>
-
-<p align="justify"><b>Iterativni proces i propagacija kroz serije (Epochs & Batches):</b></p>
-
-<p align="justify">Obučavanje je sprovedeno kroz 20 fiksnih epoha. Unutar svake epohe, mreža iterira kroz <i>DataLoader</i> objekat koji joj doprema podatke u mini-serijama (<i>batches</i>) veličine 1024 transakcije. Za svaku pojedinačnu seriju strogo se poštuje sledeći redosled operacija:</p>
-
-* <p align="justify"><b>Resetovanje gradijenata (<code>optimizer.zero_grad()</code>):</b> PyTorch po podrazumevanim podešavanjima akumulira gradijente kroz iteracije. Pre svakog novog koraka neophodno je programski očistiti stare gradijente kako ne bi došlo do neželjenog mešanja matematičkih vektora iz prethodnih serija.</p>
-* <p align="justify"><b>Prolaz unapred (<i>Forward pass</i>):</b> Model prima trenutnu seriju atributa i izračunava sirove izlazne vrednosti (<i>logits</i>).</p>
-* <p align="justify"><b>Računanje greške (<i>Loss computation</i>):</b> Funkcija greške upoređuje izlaze modela sa stvarnim klasama i precizno kvantifikuje odstupanje, odnosno gubitak.</p>
-* <p align="justify"><b>Prolaz unazad (<i>Backward pass</i>):</b> Primenom lanca izvoda (<i>Backpropagation</i>), izračunavaju se gradijenti greške u odnosu na svaku pojedinačnu težinu unutar slojeva neuronske mreže.</p>
-* <p align="justify"><b>Ažuriranje težina (<i>Optimization step</i>):</b> Optimizator prilagođava težine neurona u smeru negativnog gradijenta, čime se minimizuje ukupna greška za sledeću iteraciju.</p>
-
-<p align="justify">Sve vrednosti grešaka na nivou serija se akumuliraju i usrednjavaju, čime se dobija prosečan <i>Loss</i> za celu epohu. Ove vrednosti se trajno čuvaju u listi <code>pytorch_loss_history</code> radi naknadne vizuelizacije krive učenja i provere stabilnosti konvergencije sistema.</p>
-
-<div align="center">
-<img width="717" height="471" alt="grafik2" src="https://github.com/user-attachments/assets/c0a029d4-889a-4459-ac7b-746544434c50" />
-</div>
-
-<p align="justify">Vrednosti gubitka tokom epoha prikazane su na grafikonu iznad. Gubitak je konstantno opadao od početnih 0.08 do 0.0017 u 20. epohi, što ukazuje da je model uspešno naučio obrasce u podacima. Odsustvo naglih skokova i monotoni pad sugerišu stabilnu konvergenciju. Nema znakova preteranog prilagođavanja (overfitting) na samom trening skupu, ali je neophodno proveriti i performanse na test skupu.</p>
-
-### Evaluacija
-
-Nakon završenog procesa obučavanja, pokrenut je postupak evaluacije modela nad testnim skupom podataka kroz sledeće faze:
-
-<p align="justify"><b>1. Prebacivanje modela u režim evaluacije</b>: Model smo eksplicitno prebacili u režim rada za testiranje. Ovo privremeno deaktivira specifične trening slojeve, obezbeđujući konzistentnost predikcija.</p>
-<p align="justify"><b>2. Isključivanje računanja gradijenata</b>: Pošto se nad testnim podacima ne vrši obučavanje niti ažuriranje težina, ovaj blok sprečava PyTorch da gradi računarski graf i pamti gradijente. Time se drastično smanjuje potrošnja memorije i ubrzava izvršavanje koda.</p>
-
-<p align="justify"><b>3. Konverzija izlaza u binarne klase (Sigmoid + Threshold)</b>: Budući da model u poslednjem sloju generiše sirove vrednosti (engl. <i>logits</i>), funkcija <code>torch.sigmoid(outputs)</code> kompresuje izlaze u opseg [0, 1], transformišući ih u stvarne verovatnoće prevare.</p>
-
-   * <p align="justify">Primenom praga odlučivanja od 0.5, sve transakcije sa većom verovatnoćom automatski dobijaju klasu 1 (Prevara), dok ostale dobijaju klasu 0 (Regularna transakcija).</p>
-
-<p align="justify">Konačni rezultati se ravnaju i prebacuju iz PyTorch tenzora u standardne NumPy nizove radi dalje metričke evaluacije.</p>
-
-### -> Matrica konfuzije
-
-<div align="center">
-<img width="590" height="490" alt="cm2" src="https://github.com/user-attachments/assets/8153a576-b7f5-42f6-94d4-c2087b69f793" />
-</div>
-
-<p align="justify">Inicijalni PyTorch model uspešno je identifikovao 80 stvarnih prevara (<b>True Positive</b>) i tačno klasifikovao 56.847 regularne transakcije (<b>True Negative</b>). Činjenica da je mreža već u svom osnovnom obliku, bez dodatnog otežavanja klasa, uspela da locira ~80% anomalija pokazuje da prelazak na dinamičko PyTorch okruženje i Adam optimizator daje izuzetno agresivnu granicu odlučivanja.</p>
+## 9. Zaključak
 
 <p align="justify">
-Sa svega 17 lažnih uzbuna (<b>False Positive</b>) i 18 propuštenih prevara (<b> False Negative</b>) vidljivo je značajno poboljšanje u odnosu na <i>skicit-learn</i> model.
+U ovom radu implementirane su i evaluirane četiri konfiguracije višeslojnih perceptrona za detekciju prevara u transakcijama kreditnih kartica, uz fokus na rešavanje problema ekstremnog disbalansa klasa (svega ~0.17% prevara u skupu).
 </p>
-
-### -> Klasifikacioni izveštaj za Baseline Model
-
-<div align="center">
-
-| Klasa / Metrika | Precision | Recall | F1-Score | Support |
-| :--- | :---: | :---: | :---: | :---: |
-| **Regularna (0)** | 1.00 | 1.00 | 1.00 | 56864 |
-| **Prevara (1)** | 0.82 | 0.82 | 0.82 | 98 |
-| **Accuracy** | — | — | 1.00 | 56962 |
-| **Macro Avg** | 0.91 | 0.91 | 0.91 | 56962 |
-| **Weighted Avg** | 1.00 | 1.00 | 1.00 | 56962 |
-
-</div>
-
 <p align="justify">
-Nominalna ukupna tačnost modela (<b>Accuracy</b>) iznosi visokih 1.00 (100%).
+<b>Model 2 (osnovni PyTorch MLP)</b> pokazao se kao optimalno rešenje sa uniformnim F1-score-om od 0.82 za klasu prevara, minimalnim brojem lažnih uzbuna (17) i stabilnom krivom učenja. Analiza osetljivosti potvrđuje da model donosi odluke na osnovu više relevantnih signala, što ga čini otpornim i pouzdanim. Threshold analiza sprovedena nad Modelima 3 i 4 pokazala je da ni podešavanje praga odlučivanja ne može kompenzovati strukturalni problem agresivnog balansiranja klasa — čime je superiornost Modela 2 dodatno učvršćena.
 </p>
-
 <p align="justify">
-Za klasu prevara (1), koja je ključna za poslovanje, model ostvaruje:
-
-*   **Preciznost** = 0.82 – od svih transakcija koje je model označio kao sumnjive, 82% su zaista prevare, što znači da je samo 18% lažnih uzbuna.
-*   **Odziv** = 0.82 – model uspešno detektuje 82% svih stvarnih prevara, što je solidan nivo osetljivosti.
-*   **F1-score** = 0.82 – harmonijska sredina preciznosti i odziva potvrđuje dobru izbalansiranost ove dve metrike.
-
-**Makro prosek** (macro avg) od 0.91 za preciznost, odziv i F1 pokazuje da model podjednako dobro radi na obe klase, uprkos debalansu.
+Ključna lekcija ovog projekta jeste da u domenima sa ekstremnim disbalansom klasa, sofisticiranija tehnika ne znači nužno bolji rezultat. Model koji minimalistički i stabilno uči granice između klasa — bez agresivnih intervencija u funkciji greške — pokazao se superiornijim od modela sa eksplicitnim mehanizmima balansiranja. Preciznost od 0.82 i recall od 0.82 čine Model 2 direktno primenljivim u realnom bankarskom okruženju, gde je podjednako važno uhvatiti prevaru i ne blokirati legitimnog korisnika.
 </p>
 
-<p align="justify">
-Osnovni PyTorch model predstavlja značajan napredak u odnosu na inicijalni scikit-learn model. Sa F1-score-om od 0.82 za klasu prevara, ovaj model nudi solidnu osnovu za dalje finom podešavanje. Niska stopa lažnih uzbuna (preciznost 0.82) čini ga pogodnim za realnu primenu, dok bi se daljim povećanjem težine klase prevara mogao dodatno poboljšati odziv, uz potencijalni blagi pad preciznosti.
-</p>
+## Autori
+
+* Anja Perović 2022/0174
+* Una Ilić 2022/0291
